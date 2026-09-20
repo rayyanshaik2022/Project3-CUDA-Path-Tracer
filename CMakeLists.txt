@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.24)
 project(cis565_path_tracer LANGUAGES CUDA CXX)
 
+if (MSVC)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
+    )
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
