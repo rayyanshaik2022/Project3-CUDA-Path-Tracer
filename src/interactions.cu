@@ -51,7 +51,19 @@ __host__ __device__ void scatterRay(
     const Material &m,
     thrust::default_random_engine &rng)
 {
-    // TODO: implement this.
-    // A basic implementation of pure-diffuse shading will just call the
-    // calculateRandomDirectionInHemisphere defined above.
+  // TODO: implement this.
+  // A basic implementation of pure-diffuse shading will just call the
+  // calculateRandomDirectionInHemisphere defined above.
+
+  // A 'bounced' ray starts at the intersection point. Offset slightly above the surface to avoid it being in the surface.
+  pathSegment.ray.origin = intersect + (normal * 0.0001f);
+
+  // Valid / works for a scene with only diffuse materials
+  pathSegment.ray.direction = calculateRandomDirectionInHemisphere(normal, rng);
+
+  // Accumulate color from all rays in path
+  pathSegment.color *= m.color;
+
+  pathSegment.remainingBounces--;
+
 }
