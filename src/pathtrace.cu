@@ -94,12 +94,16 @@ static Scene* hst_scene = NULL;
 static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
+static Triangle* dev_triangles = nullptr;
 static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 // TODO: static variables for device memory, any extra info you need, etc
 // ...
+
+// Toggleables
 static bool sortByMaterial = false;
+static bool meshCullingEnabled = true;
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -128,6 +132,12 @@ void pathtraceInit(Scene* scene)
     cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
     // TODO: initialize any extra device memeory you need
+    if (!scene->triangles.empty()) {
+      size_t bytes = scene->triangles.size() * sizeof(Triangle);
+
+      cudaMalloc(&dev_triangles, bytes);
+      cudaMemcpy(dev_triangles, scene->triangles.data(), bytes, cudaMemcpyHostToDevice);
+    }
 
     checkCUDAError("pathtraceInit");
 }
@@ -140,6 +150,8 @@ void pathtraceFree()
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
     // TODO: clean up any extra device memory you created
+    cudaFree(dev_triangles);
+    dev_triangles = nullptr; // just in case
 
     checkCUDAError("pathtraceFree");
 }
@@ -191,7 +203,10 @@ __global__ void computeIntersections(
     PathSegment* pathSegments,
     Geom* geoms,
     int geoms_size,
-    ShadeableIntersection* intersections)
+    Triangle* triangles,
+    ShadeableIntersection* intersections,
+    bool meshCullingEnabled
+)
 {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -219,6 +234,7 @@ __global__ void computeIntersections(
         for (int i = 0; i < geoms_size; i++)
         {
             Geom& geom = geoms[i];
+            t = -1.0f;
 
             if (geom.type == CUBE)
             {
@@ -229,6 +245,33 @@ __global__ void computeIntersections(
                 t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
             }
             // TODO: add more intersection tests here... triangle? metaball? CSG?
+            else if (geom.type == MESH) {
+              float closestTriangleT = FLT_MAX; // nearest search
+              glm::vec3 closestTriangleNormal;
+
+              // Skip if we dont hit the AABB of the mesh
+              if (meshCullingEnabled && !intersectsAABB(pathSegment.ray, geom.boundsMin, geom.boundsMax)) {
+                continue;
+              }
+
+              for (int j = 0; j < geom.triangleCount; j++) {
+                const Triangle& triangle = triangles[geom.triangleStart + j];
+
+                glm::vec3 triangleNormal;
+                float triangleT = triangleIntersectionTest(triangle, pathSegment.ray, triangleNormal);
+
+                if (triangleT > 0.0f && triangleT < closestTriangleT) {
+                  closestTriangleT = triangleT;
+                  closestTriangleNormal = triangleNormal;
+                }
+              }
+
+              if (closestTriangleT < FLT_MAX) { // double check there actually is a triangle
+                t = closestTriangleT;
+                tmp_normal = closestTriangleNormal;
+                tmp_intersect = pathSegment.ray.origin + t * pathSegment.ray.direction;
+              }
+            }
 
             // Compute the minimum t from the intersection tests to determine what
             // scene geometry object was hit first.
@@ -463,7 +506,9 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_geoms,
             hst_scene->geoms.size(),
-            dev_intersections
+            dev_triangles,
+            dev_intersections,
+            meshCullingEnabled
         );
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();

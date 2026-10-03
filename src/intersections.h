@@ -71,3 +71,15 @@ __host__ __device__ float sphereIntersectionTest(
     glm::vec3& intersectionPoint,
     glm::vec3& normal,
     bool& outside);
+
+__host__ __device__ float triangleIntersectionTest(
+  const Triangle& triangle,
+  const Ray& ray,
+  glm::vec3& normal
+);
+
+__host__ __device__ bool intersectsAABB(
+  const Ray& ray,
+  const glm::vec3& boundsMin,
+  const glm::vec3& boundsMax
+);

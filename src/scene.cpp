@@ -2,11 +2,15 @@
 
 #include "utilities.h"
 
+#include "gltfLoader.h"
+
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include "json.hpp"
 
 #include <fstream>
+#include <cfloat>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -33,6 +37,8 @@ Scene::Scene(string filename)
 
 void Scene::loadFromJSON(const std::string& jsonName)
 {
+
+    // Test read TODO (remove)
     std::ifstream f(jsonName);
     json data = json::parse(f);
     const auto& materialsData = data["Materials"];
@@ -67,25 +73,59 @@ void Scene::loadFromJSON(const std::string& jsonName)
     {
         const auto& type = p["TYPE"];
         Geom newGeom;
+
+        const auto& trans = p["TRANS"];
+        const auto& rotat = p["ROTAT"];
+        const auto& scale = p["SCALE"];
+
+        newGeom.translation = glm::vec3(trans[0], trans[1], trans[2]);
+        newGeom.rotation = glm::vec3(rotat[0], rotat[1], rotat[2]);
+        newGeom.scale = glm::vec3(scale[0], scale[1], scale[2]);
+
+        newGeom.transform = utilityCore::buildTransformationMatrix(
+          newGeom.translation, newGeom.rotation, newGeom.scale
+        );
+        newGeom.inverseTransform = glm::inverse(newGeom.transform);
+        newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
+
         if (type == "cube")
         {
-            newGeom.type = CUBE;
+          newGeom.type = CUBE;
+        }
+        else if (type == "mesh") {
+          std::filesystem::path modelPath = std::filesystem::path(jsonName).parent_path() / p["FILE"].get<std::string>();
+
+          newGeom.type = MESH;
+          newGeom.triangleStart = static_cast<int>(triangles.size());
+
+          loadGLTF(modelPath.string(), newGeom.transform, triangles);
+
+          newGeom.triangleCount = static_cast<int>(triangles.size() - newGeom.triangleStart);
+
+          newGeom.boundsMin = glm::vec3(FLT_MAX);
+          newGeom.boundsMax = glm::vec3(-FLT_MAX);
+
+          for (int j = 0; j < newGeom.triangleCount; j++) {
+            const Triangle& tri = triangles[newGeom.triangleStart + j];
+
+            newGeom.boundsMin = glm::min(newGeom.boundsMin, tri.v0);
+            newGeom.boundsMin = glm::min(newGeom.boundsMin, tri.v1);
+            newGeom.boundsMin = glm::min(newGeom.boundsMin, tri.v2);
+
+            newGeom.boundsMax = glm::max(newGeom.boundsMax, tri.v0);
+            newGeom.boundsMax = glm::max(newGeom.boundsMax, tri.v1);
+            newGeom.boundsMax = glm::max(newGeom.boundsMax, tri.v2);
+          }
+
+          // Offset bounds to ensure it wraps AROUND mesh
+          newGeom.boundsMin -= glm::vec3(1e-4f);
+          newGeom.boundsMax += glm::vec3(1e-4f);
         }
         else
         {
             newGeom.type = SPHERE;
         }
         newGeom.materialid = MatNameToID[p["MATERIAL"]];
-        const auto& trans = p["TRANS"];
-        const auto& rotat = p["ROTAT"];
-        const auto& scale = p["SCALE"];
-        newGeom.translation = glm::vec3(trans[0], trans[1], trans[2]);
-        newGeom.rotation = glm::vec3(rotat[0], rotat[1], rotat[2]);
-        newGeom.scale = glm::vec3(scale[0], scale[1], scale[2]);
-        newGeom.transform = utilityCore::buildTransformationMatrix(
-            newGeom.translation, newGeom.rotation, newGeom.scale);
-        newGeom.inverseTransform = glm::inverse(newGeom.transform);
-        newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
 
         geoms.push_back(newGeom);
     }
