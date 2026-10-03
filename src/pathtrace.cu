@@ -104,6 +104,7 @@ static ShadeableIntersection* dev_intersections = NULL;
 // Toggleables
 static bool sortByMaterial = false;
 static bool meshCullingEnabled = true;
+static bool russianRouletteEnabled = false;
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -361,7 +362,10 @@ __global__ void shadeMaterial(
   int num_paths,
   ShadeableIntersection* shadeableIntersections,
   PathSegment* pathSegments,
-  Material* materials)
+  Material* materials,
+  int bounceIndex,
+  bool russianRouletteEnabled
+  )
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < num_paths)
@@ -405,6 +409,24 @@ __global__ void shadeMaterial(
         // The color value of materials hit doesn't matter if there is no light source
         if (pathSegments[idx].remainingBounces <= 0) {
           pathSegments[idx].color = glm::vec3(0.0f);
+          return;
+        }
+
+        // Perform Russian Roulette 
+        if (russianRouletteEnabled && bounceIndex > 3) {
+          // PBRT uses 'beta.y' for luminance -> need to calculate this from rgb
+          // https://en.wikipedia.org/wiki/Relative_luminance
+          float luminance = glm::dot(path.color, glm::vec3(0.2126f, 0.7152f, 0.0722f));
+          float q = fmaxf(0.05f, 1.0f - luminance);
+
+          // prevent division by zero here...
+          if (q >= 1.0f || u01(rng) < q) {
+            path.remainingBounces = 0;
+            path.color = glm::vec3(0.0f);
+            return;
+          }
+
+          path.color /= (1.0f - q);
         }
       }
       // If there was no intersection, color the ray black.
@@ -540,7 +562,9 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             num_paths,
             dev_intersections,
             dev_paths,
-            dev_materials
+            dev_materials,
+            depth - 1, // bounceIndex (russianRoulette in pbrt only tries roulette for bounces > 3)
+            russianRouletteEnabled
         );
          // TODO: end iterations should be based off stream compaction results.
 

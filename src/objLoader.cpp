@@ -19,7 +19,7 @@ void loadObj(
     throw std::runtime_error(reader.Error());
   }
 
-  // Prints mostly material related warnings
+  // Prints mostly material related warnings/
   if (!reader.Warning().empty()) {
     std::cerr << reader.Warning() << std::endl;
   }
