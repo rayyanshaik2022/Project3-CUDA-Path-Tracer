@@ -72,6 +72,10 @@ struct Camera
     glm::vec3 right;
     glm::vec2 fov;
     glm::vec2 pixelLength;
+    
+    // Physically-based Depth of Field
+    float lensRadius = 0.0f;
+    float focalDistance = 1.0f;
 };
 
 struct RenderState

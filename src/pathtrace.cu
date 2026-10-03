@@ -104,7 +104,7 @@ static ShadeableIntersection* dev_intersections = NULL;
 // Toggleables
 static bool sortByMaterial = false;
 static bool meshCullingEnabled = true;
-static bool russianRouletteEnabled = false;
+static bool russianRouletteEnabled = true;
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -158,6 +158,37 @@ void pathtraceFree()
 }
 
 /**
+* https://pbr-book.org/4ed/Sampling_Algorithms/Sampling_Multidimensional_Functions#SampleUniformDiskConcentric
+*/
+__host__ __device__ glm::vec2 sampleDiskConcentric(float u, float v) {
+
+  // Map to [-1, 1]^2 and avoid degenercy
+  float x = 2.0f * u - 1.0f;
+  float y = 2.0f * v - 1.0f;
+
+  if (x == 0.0f && y == 0.0f) {
+    return glm::vec2(0.0f);
+  }
+
+  const float PiOver4 = static_cast<float>(PI) * 0.25f;
+  const float PiOver2 = static_cast<float>(PI) * 0.5f;
+
+  float theta;
+  float radius;
+
+  if (fabs(x) > fabs(y)) {
+    radius = x;
+    theta = PiOver4 * (y / x);
+  }
+  else {
+    radius = y;
+    theta = PiOver2 - PiOver4 * (x / y);
+  }
+
+  return glm::vec2(radius * cosf(theta), radius * sinf(theta));
+}
+
+/**
 * Generate PathSegments with rays from the camera through the screen into the
 * scene, which is the first bounce of rays.
 *
@@ -188,6 +219,23 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
             - cam.right * cam.pixelLength.x * (sampX - (float)cam.resolution.x * 0.5f)
             - cam.up * cam.pixelLength.y * (sampY - (float)cam.resolution.y * 0.5f)
         );
+
+        // depth of field
+        if (cam.lensRadius > 0.0f) {
+          // When ray hits the focal plane
+          float t = cam.focalDistance / glm::dot(segment.ray.direction, cam.view);
+
+          glm::vec3 focusPoint = cam.position + t * segment.ray.direction;
+
+          // Sample aperture
+          float lensU = u01(rng);
+          float lensV = u01(rng);
+          glm::vec2 lensPoint = cam.lensRadius * sampleDiskConcentric(lensU, lensV);
+
+          segment.ray.origin = cam.position + (lensPoint.x * cam.right) + (lensPoint.y * cam.up);
+
+          segment.ray.direction = glm::normalize(focusPoint - segment.ray.origin);
+        }
 
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;

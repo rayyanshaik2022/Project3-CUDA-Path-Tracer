@@ -156,17 +156,24 @@ void Scene::loadFromJSON(const std::string& jsonName)
     camera.lookAt = glm::vec3(lookat[0], lookat[1], lookat[2]);
     camera.up = glm::vec3(up[0], up[1], up[2]);
 
+    // Depth of field - optionally provided args
+    camera.lensRadius = cameraData.value("LENS_RADIUS", 0.0f);
+    //  distance between eye and lookat
+    camera.focalDistance = cameraData.value("FOCAL_DISTANCE", glm::length(camera.lookAt - camera.position));
+
     //calculate fov based on resolution
     float yscaled = tan(fovy * (PI / 180));
     float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
     float fovx = (atan(xscaled) * 180) / PI;
     camera.fov = glm::vec2(fovx, fovy);
 
+    // Calculate view first to ensure right is orthogonal to view
+    camera.view = glm::normalize(camera.lookAt - camera.position);
     camera.right = glm::normalize(glm::cross(camera.view, camera.up));
     camera.pixelLength = glm::vec2(2 * xscaled / (float)camera.resolution.x,
         2 * yscaled / (float)camera.resolution.y);
 
-    camera.view = glm::normalize(camera.lookAt - camera.position);
+    
 
     //set up render camera stuff
     int arraylen = camera.resolution.x * camera.resolution.y;
