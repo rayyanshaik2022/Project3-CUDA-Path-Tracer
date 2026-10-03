@@ -102,7 +102,7 @@ static ShadeableIntersection* dev_intersections = NULL;
 // ...
 
 // Toggleables
-static bool sortByMaterial = false;
+static bool sortByMaterial = true;
 static bool meshCullingEnabled = true;
 static bool russianRouletteEnabled = true;
 
@@ -343,7 +343,10 @@ __global__ void computeIntersections(
             // The ray hits something
             intersections[path_index].t = t_min;
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
-            intersections[path_index].surfaceNormal = normal;
+            
+            bool frontFace = glm::dot(pathSegment.ray.direction, normal) < 0.0f;
+            intersections[path_index].frontFace = frontFace;
+            intersections[path_index].surfaceNormal = frontFace ? normal : -normal;
         }
     }
 }
@@ -392,7 +395,7 @@ __global__ void shadeFakeMaterial(
                 //pathSegments[idx].color *= u01(rng); // apply some noise because why not      
               PathSegment& path = pathSegments[idx];
               glm::vec3 intersectionAt = path.ray.origin + (path.ray.direction * intersection.t);
-              scatterRay(path, intersectionAt, intersection.surfaceNormal, material, rng);
+              scatterRay(path, intersectionAt, intersection.surfaceNormal, intersection.frontFace, material, rng);
             }
             // If there was no intersection, color the ray black.
             // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
@@ -452,7 +455,7 @@ __global__ void shadeMaterial(
         //pathSegments[idx].color *= u01(rng); // apply some noise because why not      
         PathSegment& path = pathSegments[idx];
         glm::vec3 intersectionAt = path.ray.origin + (path.ray.direction * intersection.t);
-        scatterRay(path, intersectionAt, intersection.surfaceNormal, material, rng);
+        scatterRay(path, intersectionAt, intersection.surfaceNormal, intersection.frontFace, material, rng);
 
         // The color value of materials hit doesn't matter if there is no light source
         if (pathSegments[idx].remainingBounces <= 0) {

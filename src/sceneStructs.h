@@ -103,4 +103,5 @@ struct ShadeableIntersection
   float t;
   glm::vec3 surfaceNormal;
   int materialId;
+  bool frontFace; // Materials like glass ned to know if ray is entering or exiting
 };
