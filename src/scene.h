@@ -2,6 +2,7 @@
 
 #include "sceneStructs.h"
 #include <vector>
+#include "objLoader.h"
 
 class Scene
 {

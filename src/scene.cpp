@@ -3,6 +3,7 @@
 #include "utilities.h"
 
 #include "gltfLoader.h"
+#include "objLoader.h"
 
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
@@ -98,7 +99,17 @@ void Scene::loadFromJSON(const std::string& jsonName)
           newGeom.type = MESH;
           newGeom.triangleStart = static_cast<int>(triangles.size());
 
-          loadGLTF(modelPath.string(), newGeom.transform, triangles);
+          std::string fileExtension = modelPath.extension().string();
+
+          if (fileExtension == ".obj") {
+            loadObj(modelPath.string(), newGeom.transform, triangles);
+          }
+          else if (fileExtension == ".gltf" || fileExtension == ".glb") {
+            loadGLTF(modelPath.string(), newGeom.transform, triangles);
+          }
+          else {
+            throw std::runtime_error("Unsupported mesh extension '" + fileExtension + "'\n");
+          }
 
           newGeom.triangleCount = static_cast<int>(triangles.size() - newGeom.triangleStart);
 
