@@ -102,9 +102,10 @@ static ShadeableIntersection* dev_intersections = NULL;
 // ...
 
 // Toggleables
-static bool sortByMaterial = true;
+static bool sortByMaterial = false;
 static bool meshCullingEnabled = true;
-static bool russianRouletteEnabled = true;
+static bool russianRouletteEnabled = false;
+static bool streamCompactionEnabled = true;
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -212,8 +213,13 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
         // TODO: implement antialiasing by jittering the ray
-        float sampX = static_cast<float>(x) + u01(rng) - 0.5f;
-        float sampY = static_cast<float>(y) + u01(rng) - 0.5f;
+        float sampX = static_cast<float>(x);
+        float sampY = static_cast<float>(y);
+
+        if (cam.antiAliasingEnabled) {
+          sampX += u01(rng) - 0.5f;
+          sampY += u01(rng) - 0.5f;
+        }
 
         segment.ray.direction = glm::normalize(cam.view
             - cam.right * cam.pixelLength.x * (sampX - (float)cam.resolution.x * 0.5f)
@@ -620,15 +626,17 @@ void pathtrace(uchar4* pbo, int frame, int iter)
          // TODO: end iterations should be based off stream compaction results.
 
         // partition doesnt wont delete unused segments
-        PathSegment* activeEnd = thrust::partition(
-          thrust::device,
-          dev_paths,
-          dev_paths + num_paths,
-          IsActive{}
+        if (streamCompactionEnabled) {
+          PathSegment* activeEnd = thrust::partition(
+            thrust::device,
+            dev_paths,
+            dev_paths + num_paths,
+            IsActive{}
           );
 
-        // buf length
-        num_paths = static_cast<int>(activeEnd - dev_paths);
+          // buf length
+          num_paths = static_cast<int>(activeEnd - dev_paths);
+        }
 
         if (guiData != NULL)
         {

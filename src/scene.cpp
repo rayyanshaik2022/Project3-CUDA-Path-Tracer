@@ -163,6 +163,9 @@ void Scene::loadFromJSON(const std::string& jsonName)
     camera.lookAt = glm::vec3(lookat[0], lookat[1], lookat[2]);
     camera.up = glm::vec3(up[0], up[1], up[2]);
 
+    // Anti Aliasing Flag
+    camera.antiAliasingEnabled = cameraData.value("ANTI_ALIASING", true);
+
     // Depth of field - optionally provided args
     camera.lensRadius = cameraData.value("LENS_RADIUS", 0.0f);
     //  distance between eye and lookat

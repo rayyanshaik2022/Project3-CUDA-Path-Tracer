@@ -76,6 +76,9 @@ struct Camera
     // Physically-based Depth of Field
     float lensRadius = 0.0f;
     float focalDistance = 1.0f;
+
+    // anti aliasing flag
+    bool antiAliasingEnabled = true;
 };
 
 struct RenderState
