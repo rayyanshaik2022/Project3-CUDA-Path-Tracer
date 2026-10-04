@@ -30,6 +30,8 @@ In the current implementation, importing is geometry-only: materials are assigne
 
 Mesh bounding volume culling proved to be a significant optimization on complex scenes, as shown by the performance speed up in the tabletop scene with it on versus off. The benefit is larger in complex scenes because rays that miss a mesh’s bounding box skip all of its triangle tests. For a simple cube, there are few triangles to test, so culling saves little work.
 
+File parsing and tirangle conversion already runs on the CPU. We could improve this by implementing a BVH, reducing triangle tests across the whole mesh.
+
 ### Physically Based Depth of Field
 I implemented depth of field using the model described in [PBRTv4](https://pbr-book.org/4ed/Cameras_and_Film/Projective_Camera_Models#TheThinLensModelandDepthofField).
 
@@ -50,6 +52,8 @@ The scene JSON allows for the configuration of two camera settings:
 
 Depth of field adds a small performance cost because each camera ray requires aperture sampling, a lens-origin offset, and a recalculated direction toward the focal plane. These operations occur only during camera-ray generation, so their overhead is relatively small compared with tracing the full path.
 
+A CPU implementatino would use the same aperture sampling logic, while the GPU generates many camera rays at the same time.
+
 ### Reflections & Refraction
 I implemented mirror reflection using `glm::reflect`, and glass refraction using `glm::refract` for [Snell's Law](https://pbr-book.org/4ed/Reflection_Models/Specular_Reflection_and_Transmission).
 
@@ -65,6 +69,8 @@ Glass IOR (index of refraction) is configurable through the scene JSON. Transmit
 ![reflrefrperformance](/img/graphs/diffusemirrorglass.png)
 
 Reflection and refraction change ray directions and therefore how long paths remain in the scene. Although glass requires additional Fresnel and refraction calculations, its lower measured render time likely reflects more paths escaping (open scene) or reaching lights sooner. These results measure the entire path, not just the cost of evaluating each material.
+
+Both GPU and GPU implemenations would save work by terminating low-contribution paths. But on the GPU, compaction helps reduce the segment processing range when a path is terminated.
 
 ### Russian Roulette Path Termination
 I implemented [Russian roulette](https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Path_Tracing) to probibalistically terminate low-contribution paths after their initial bounces (Specifically when `bounces > 3`). The termination probability is based on the brightness/luminance of the path's accumulated color, with dimmer paths more likely to terminate. Surviving paths also have their color divided by their survival probability, to preserve th expected result.
@@ -86,6 +92,8 @@ Stochastic antialiasing randomly jitters camera rays within each pixel. Averagin
 
 ### Stream Compaction
 After each bounce, stream compaction groups active paths at the front of the buffer using `thrust::partition`. Subsequent intersection and shading kernels process only this smaller range, avoiding launches over terminated paths. Completed paths remain in the buffer for final image accumulation.
+
+A CPU could partition paths without the GPU kernel overhead, but the GPU can more effectivley process large buffers in paralle. Maybe skipping compaction on early bounces when few paths are terminated could help reduce overhead.
 
 ![sc1](/img/graphs/sc1.png)
 
